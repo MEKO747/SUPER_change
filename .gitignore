@@ -9,3 +9,5 @@
 **.bin
 **.zip
 **.ply
+**/install
+**/log
