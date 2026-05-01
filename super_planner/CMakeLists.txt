@@ -23,8 +23,8 @@ add_definitions(-DUSE_ROS2)
 string(TOUPPER $ENV{ROS_DISTRO} ROS_VERSION)
 message(STATUS "ROS version: ${ROS_VERSION}")
 
-# for CLION to search the package, user should change to his/her own relative location
-set(CMAKE_PREFIX_PATH ../../../install)
+# Keep colcon-provided prefixes and append the legacy local install hint.
+list(APPEND CMAKE_PREFIX_PATH ../../../install)
 include_directories(
         SYSTEM
         include
