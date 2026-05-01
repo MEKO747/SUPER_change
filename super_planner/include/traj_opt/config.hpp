@@ -23,6 +23,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <string>
 #include <utils/geometry/quadrotor_flatness.hpp>
 #include <utils/header/yaml_loader.hpp>
@@ -40,6 +41,8 @@ namespace traj_opt {
     class Config {
     public:
         bool uniform_time_en{false};
+        bool ground_vehicle{false};
+        string vehicle_type{"quadrotor"};
 
         flatness::FlatnessMap quadrotot_flatness;
 
@@ -83,6 +86,9 @@ namespace traj_opt {
             }
 
             loader.LoadParam("traj_opt/switch/print_optimizer_log", print_optimizer_log, false);
+            loader.LoadParam("traj_opt/vehicle_type", vehicle_type, string("quadrotor"));
+            ground_vehicle = (vehicle_type == "ground_car" || vehicle_type == "car" ||
+                              vehicle_type == "rover" || vehicle_type == "ugv");
             /// Load Param for Flatness
             loader.LoadParam("traj_opt/flatness/mass", mass, 1.0);
             loader.LoadParam("traj_opt/flatness/dh", dh, 0.7);
@@ -116,7 +122,16 @@ namespace traj_opt {
             loader.LoadParam("traj_opt" + ns + "penna_jerk", penna_jerk, -1.0);
             loader.LoadParam("traj_opt" + ns + "penna_attract", penna_attract, -1.0);
             loader.LoadParam("traj_opt" + ns + "penna_omg", penna_omg, -1.0);
-            loader.LoadParam("traj_opt" + ns + "penna_thr", penna_thr, -1.0);
+            if (!loader.LoadParam("traj_opt" + ns + "penna_thr", penna_thr, -1.0)) {
+                double legacy_max_acc_thr, legacy_min_acc_thr;
+                const bool has_legacy_max = loader.LoadParam("traj_opt" + ns + "penna_max_acc_thr",
+                                                              legacy_max_acc_thr, -1.0);
+                const bool has_legacy_min = loader.LoadParam("traj_opt" + ns + "penna_min_acc_thr",
+                                                              legacy_min_acc_thr, -1.0);
+                if (has_legacy_max || has_legacy_min) {
+                    penna_thr = std::max(legacy_max_acc_thr, legacy_min_acc_thr);
+                }
+            }
 
             if (penna_scale > 0) {
                 penna_t = penna_t * penna_scale;
@@ -128,6 +143,11 @@ namespace traj_opt {
                 penna_attract = penna_attract * penna_scale;
                 penna_omg = penna_omg * penna_scale;
                 penna_thr = penna_thr * penna_scale;
+            }
+
+            if (ground_vehicle) {
+                penna_omg = -1.0;
+                penna_thr = -1.0;
             }
 
             quadrotot_flatness.reset(mass, grav, dh, dv, cp, v_eps);

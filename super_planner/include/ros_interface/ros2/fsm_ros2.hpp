@@ -30,9 +30,11 @@
 
 #include "fsm/fsm.h"
 
+#include <cmath>
 #include <rclcpp/rclcpp.hpp>
 #include <ros_interface/ros2/ros2_interface.hpp>
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "mars_quadrotor_msgs/msg/position_command.hpp"
@@ -44,6 +46,7 @@ namespace fsm {
 
         rclcpp::Node::SharedPtr nh_;
         rclcpp::Publisher<mars_quadrotor_msgs::msg::PositionCommand>::SharedPtr cmd_pub_;
+        rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_pub_;
         rclcpp::Publisher<mars_quadrotor_msgs::msg::PolynomialTrajectory>::SharedPtr mpc_cmd_pub_;
         rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr path_pub_;
         rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_sub_;
@@ -162,19 +165,43 @@ namespace fsm {
             pos_cmd.yaw = yaw;
             pos_cmd.yaw_dot = yaw_dot;
             pos_cmd.trajectory_flag = on_backup_traj ? 2 : 1;
-            Vec3f rpy, omg;
-            double aT;
-            geometry_utils::convertFlatOutputToAttAndOmg(pvaj.col(0), pvaj.col(1), pvaj.col(2), pvaj.col(3), yaw,
-                                                         yaw_dot, rpy, omg, aT);
-            pos_cmd.attitude.x = rpy(0);
-            pos_cmd.attitude.y = rpy(1);
-            pos_cmd.attitude.z = rpy(2);
-            pos_cmd.angular_velocity.x = omg(0);
-            pos_cmd.angular_velocity.y = omg(1);
-            pos_cmd.angular_velocity.z = omg(2);
-            pos_cmd.thrust.z = aT;
+            if (cfg_.ground_vehicle) {
+                pos_cmd.attitude.x = 0.0;
+                pos_cmd.attitude.y = 0.0;
+                pos_cmd.attitude.z = yaw;
+                pos_cmd.angular_velocity.x = 0.0;
+                pos_cmd.angular_velocity.y = 0.0;
+                pos_cmd.angular_velocity.z = yaw_dot;
+                pos_cmd.thrust.z = 0.0;
+            } else {
+                Vec3f rpy, omg;
+                double aT;
+                geometry_utils::convertFlatOutputToAttAndOmg(pvaj.col(0), pvaj.col(1), pvaj.col(2), pvaj.col(3), yaw,
+                                                             yaw_dot, rpy, omg, aT);
+                pos_cmd.attitude.x = rpy(0);
+                pos_cmd.attitude.y = rpy(1);
+                pos_cmd.attitude.z = rpy(2);
+                pos_cmd.angular_velocity.x = omg(0);
+                pos_cmd.angular_velocity.y = omg(1);
+                pos_cmd.angular_velocity.z = omg(2);
+                pos_cmd.thrust.z = aT;
+            }
             latest_cmd = pos_cmd;
             cmd_logs_.push_back(latest_cmd);
+        }
+
+        void getOneTwistCommand(geometry_msgs::msg::Twist &cmd_vel,
+                                mars_quadrotor_msgs::msg::PositionCommand &pos_cmd,
+                                bool &traj_finish) {
+            getOnePositionCommand(pos_cmd, traj_finish);
+            const double cy = std::cos(pos_cmd.yaw);
+            const double sy = std::sin(pos_cmd.yaw);
+            cmd_vel.linear.x = cy * pos_cmd.velocity.x + sy * pos_cmd.velocity.y;
+            cmd_vel.linear.y = 0.0;
+            cmd_vel.linear.z = 0.0;
+            cmd_vel.angular.x = 0.0;
+            cmd_vel.angular.y = 0.0;
+            cmd_vel.angular.z = pos_cmd.yaw_dot;
         }
 
     public:
@@ -296,6 +323,7 @@ namespace fsm {
             ros_ptr_ = std::make_shared<ros_interface::Ros2Interface>(nh_);
             planner_ptr_ = std::make_shared<SuperPlanner>(cfg_path, ros_ptr_, map_ptr_);
             cmd_pub_ = nh_->create_publisher<mars_quadrotor_msgs::msg::PositionCommand>(cfg_.cmd_topic, qos);
+            cmd_vel_pub_ = nh_->create_publisher<geometry_msgs::msg::Twist>(cfg_.cmd_vel_topic, qos);
             mpc_cmd_pub_ = nh_->create_publisher<mars_quadrotor_msgs::msg::PolynomialTrajectory>(cfg_.mpc_cmd_topic,
                                                                                                  qos);
             path_pub_ = nh_->create_publisher<nav_msgs::msg::Path>("fsm/path", qos);
@@ -375,9 +403,15 @@ namespace fsm {
 
             mars_quadrotor_msgs::msg::PolynomialTrajectory heartbeat;
             getOneHeartBeatMsg(heartbeat, traj_finish_);
-            getOnePositionCommand(pid_cmd_, traj_finish_);
             mpc_cmd_pub_->publish(heartbeat);
-            cmd_pub_->publish(pid_cmd_);
+            if (cfg_.ground_vehicle) {
+                geometry_msgs::msg::Twist cmd_vel;
+                getOneTwistCommand(cmd_vel, pid_cmd_, traj_finish_);
+                cmd_vel_pub_->publish(cmd_vel);
+            } else {
+                getOnePositionCommand(pid_cmd_, traj_finish_);
+                cmd_pub_->publish(pid_cmd_);
+            }
             if (traj_finish_) {
                 cout << GREEN << " -- [Fsm] Traj finish." << RESET << endl;
                 if (closeToGoal(0.1)) {

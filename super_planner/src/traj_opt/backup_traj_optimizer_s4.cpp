@@ -134,6 +134,8 @@ void BackupTrajOpt::constraintsFunctional(const Eigen::VectorXd &T,
             violaVel = vel.squaredNorm() - vmaxSqr;
             violaAcc = acc.squaredNorm() - amaxSqr;
             violaJer = jer.squaredNorm() - jmaxSqr;
+            violaOmg = 0.0;
+            violaThrust = 0.0;
             gradThr = 0.0;
 //            gradQuat.setZero();
             gradPos << 0, 0, 0;

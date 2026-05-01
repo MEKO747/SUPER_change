@@ -48,7 +48,9 @@ namespace fsm {
 
         bool click_yaw_en{};
         string cmd_topic, mpc_cmd_topic, click_goal_topic;
+        string cmd_vel_topic, vehicle_type;
         double yaw_dot_max{};
+        bool ground_vehicle{false};
 
         Config() = default;
 
@@ -62,7 +64,11 @@ namespace fsm {
             loader.LoadParam("fsm/click_height", click_height, 1.5);
             loader.LoadParam("fsm/cmd_topic", cmd_topic, string("/planning/pos_cmd"));
             loader.LoadParam("fsm/mpc_cmd_topic", mpc_cmd_topic, string("/planning_cmd/mpc"));
+            loader.LoadParam("fsm/cmd_vel_topic", cmd_vel_topic, string("/cmd_vel"));
             loader.LoadParam("fsm/click_goal_topic", click_goal_topic, string("/planning/click_goal_topic"));
+            loader.LoadParam("traj_opt/vehicle_type", vehicle_type, string("quadrotor"));
+            ground_vehicle = (vehicle_type == "ground_car" || vehicle_type == "car" ||
+                              vehicle_type == "rover" || vehicle_type == "ugv");
 
 
             loader.LoadParam("super_planner/yaw_dot_max", yaw_dot_max, 1.0, true);

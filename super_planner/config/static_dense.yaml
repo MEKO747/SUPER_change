@@ -5,6 +5,7 @@ fsm:
   click_yaw_en: true
   replan_rate: 15.0
   cmd_topic: "/planning/pos_cmd"
+  cmd_vel_topic: "/cmd_vel"
   mpc_cmd_topic: "/planning_cmd/poly_traj"
   timer_en: true
 
@@ -34,6 +35,7 @@ super_planner:
   mpc_horizon: 15
 
 traj_opt:
+  vehicle_type: "quadrotor"
   switch:
     save_log_en: false
     print_optimizer_log: false
@@ -184,4 +186,3 @@ rog_map:
     #             the cell will be considered as unknown.
     # in all, 1.0 is more aggressive while 0.0 is more conservative.
     unk_thresh: 1.0
-
